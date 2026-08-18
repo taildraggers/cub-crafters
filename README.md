@@ -13,11 +13,13 @@ reliably for an unattended daily job.
 Note: in the companion [Aviat](https://github.com/taildraggers/aviat) repo,
 Barnstormers' single-manufacturer category page (their "Aviat Aircraft" hub)
 turned out to include unrelated aircraft — including CubCrafters models —
-mixed in with no distinguishing HTML markup. The same could happen here in
-reverse. This repo currently publishes everything found in the CubCrafters
-category unfiltered; if testing shows off-brand listings leaking in, a title
-allowlist (matching the approach used in the Aviat repo) should be added to
-`scraper/barnstormers.py`.
+mixed in with no distinguishing HTML markup. The same happened here in
+reverse: real runs found a Piper Super Cub, a Comp Air, a Cessna 150 raffle,
+a Sonex raffle, and an Aeronca 7EC raffle mixed into the "CubCrafters"
+category alongside genuine listings. `scraper/barnstormers.py` now filters
+by title against a small allowlist of CubCrafters product names
+(`TARGET_MODEL_PHRASES`: CubCrafters, Carbon Cub, XCub, CC11/CC19, Top Cub)
+before publishing, matching the approach used in the Aviat repo.
 
 ## How it works
 

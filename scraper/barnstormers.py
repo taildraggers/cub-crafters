@@ -1,4 +1,12 @@
-"""Scraper for CubCrafters aircraft listings on barnstormers.com."""
+"""Scraper for CubCrafters aircraft listings on barnstormers.com.
+
+Barnstormers' "CubCrafters" category page turned out to be loosely curated,
+same as the companion Aviat repo's "Aviat Aircraft" hub: it mixed in a Piper
+Super Cub, a Comp Air, a Cessna 150 raffle, a Sonex raffle, and an Aeronca
+7EC raffle alongside genuine CubCrafters listings, with no distinguishing
+HTML markup. So results are filtered by title against a small allowlist of
+CubCrafters product names before being published.
+"""
 from __future__ import annotations
 
 import re
@@ -16,9 +24,34 @@ CATEGORY_URLS = [
     f"{BASE}/category-17975-CubCrafters.html",
 ]
 
+# Only ads whose title matches one of these (case/hyphen/space-insensitive)
+# are kept - the category page itself isn't reliably CubCrafters-only.
+TARGET_MODEL_PHRASES = [
+    "cubcrafters",
+    "cub crafters",
+    "carbon cub",
+    "xcub",
+    "x cub",
+    "cc11",
+    "cc19",
+    "top cub",
+]
+
 MAX_PAGES = 10
 LISTING_LINK_RE = re.compile(r"^/classified-(\d+)-(.+)\.html$")
 GENERIC_SITE_TITLE_SNIPPET = "barnstormers.com find aircraft"
+
+
+def _normalize(text: str) -> str:
+    text = text.lower()
+    text = re.sub(r"[-_]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _matches_target_models(title: str) -> bool:
+    normalized = _normalize(title)
+    return any(phrase in normalized for phrase in TARGET_MODEL_PHRASES)
 
 
 def _title_from_url(url: str) -> str:
@@ -113,13 +146,16 @@ def scrape() -> list[Listing]:
 
     print(f"[{SITE_NAME}] {len(all_links)} unique listing URLs found")
 
+    candidate_links = {url for url in all_links if _matches_target_models(_title_from_url(url))}
+    print(f"[{SITE_NAME}] {len(candidate_links)} match CubCrafters product names")
+
     listings: list[Listing] = []
-    for url in sorted(all_links):
+    for url in sorted(candidate_links):
         html = fetch(url)
         if not html:
             continue
         listing = _parse_detail_page(url, html)
-        if listing:
+        if listing and _matches_target_models(listing.title):
             listings.append(listing)
 
     print(f"[{SITE_NAME}] parsed {len(listings)} listings")
