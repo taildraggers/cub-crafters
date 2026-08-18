@@ -6,6 +6,12 @@ Super Cub, a Comp Air, a Cessna 150 raffle, a Sonex raffle, and an Aeronca
 7EC raffle alongside genuine CubCrafters listings, with no distinguishing
 HTML markup. So results are filtered by title against a small allowlist of
 CubCrafters product names before being published.
+
+On top of that brand allowlist, only whole-aircraft-for-sale listings are
+kept: each ad's title must state a model year and match a recognized
+CubCrafters model, and titles that look like parts/accessories/services/
+raffles are dropped. Surviving titles are rewritten to a canonical
+"YEAR CubCrafters MODEL" form so every listing follows the same format.
 """
 from __future__ import annotations
 
@@ -14,10 +20,18 @@ from urllib.parse import unquote, urljoin
 
 from bs4 import BeautifulSoup
 
-from .common import Listing, extract_date, extract_location, extract_price, fetch
+from .common import (
+    Listing,
+    extract_date,
+    extract_location,
+    extract_price,
+    fetch,
+    format_aircraft_title,
+)
 
 SITE_NAME = "Barnstormers.com"
 BASE = "https://www.barnstormers.com"
+MAKE = "CubCrafters"
 
 # Category page for CubCrafters listings on Barnstormers.
 CATEGORY_URLS = [
@@ -52,6 +66,32 @@ def _normalize(text: str) -> str:
 def _matches_target_models(title: str) -> bool:
     normalized = _normalize(title)
     return any(phrase in normalized for phrase in TARGET_MODEL_PHRASES)
+
+
+# Ordered most-specific first, so e.g. "Carbon Cub EX-3" isn't shadowed by
+# the generic "Carbon Cub" fallback.
+_MODEL_RULES = [
+    (re.compile(r"cc11[\s-]?160", re.IGNORECASE), "CC11-160 Carbon Cub"),
+    (re.compile(r"cc19", re.IGNORECASE), "CC19 XCub"),
+    (re.compile(r"carbon\s*cub\s*ex[\s-]?3", re.IGNORECASE), "Carbon Cub EX-3"),
+    (re.compile(r"carbon\s*cub\s*ex[\s-]?2", re.IGNORECASE), "Carbon Cub EX-2"),
+    (re.compile(r"carbon\s*cub\s*ss", re.IGNORECASE), "Carbon Cub SS"),
+    (re.compile(r"carbon\s*cub\s*ul", re.IGNORECASE), "Carbon Cub UL"),
+    (re.compile(r"carbon\s*cub", re.IGNORECASE), "Carbon Cub"),
+    (re.compile(r"x[\s-]?cub", re.IGNORECASE), "XCub"),
+    (re.compile(r"fx[\s-]?3", re.IGNORECASE), "FX-3"),
+    (re.compile(r"fx[\s-]?2", re.IGNORECASE), "FX-2"),
+    (re.compile(r"ex[\s-]?3", re.IGNORECASE), "EX-3"),
+    (re.compile(r"ex[\s-]?2", re.IGNORECASE), "EX-2"),
+    (re.compile(r"top\s*cub", re.IGNORECASE), "Top Cub"),
+]
+
+
+def _extract_model(title: str) -> tuple[str, str] | None:
+    for pattern, canonical in _MODEL_RULES:
+        if pattern.search(title):
+            return MAKE, canonical
+    return None
 
 
 def _title_from_url(url: str) -> str:
@@ -106,7 +146,16 @@ def _parse_detail_page(url: str, html: str) -> Listing | None:
     if not title:
         return None
 
+    if not _matches_target_models(title):
+        return None
+
     text = soup.get_text(" ", strip=True)
+
+    formatted_title = format_aircraft_title(title, text, _extract_model)
+    if not formatted_title:
+        return None
+    title = formatted_title
+
     price = extract_price(text)
     location = extract_location(text)
     date_posted = extract_date(text)
@@ -155,7 +204,7 @@ def scrape() -> list[Listing]:
         if not html:
             continue
         listing = _parse_detail_page(url, html)
-        if listing and _matches_target_models(listing.title):
+        if listing:
             listings.append(listing)
 
     print(f"[{SITE_NAME}] parsed {len(listings)} listings")
